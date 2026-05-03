@@ -9,3 +9,6 @@ segmentation-models-pytorch
 scipy
 scikit-image
 pydicom
+pylibjpeg
+pylibjpeg-libjpeg
+pylibjpeg-openjpeg

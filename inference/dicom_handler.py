@@ -11,12 +11,33 @@ def convert_dicom_to_mp4(dicom_path, output_video_path):
         ds = pydicom.dcmread(dicom_path)
         frames = ds.pixel_array
 
-        # Handle multi-frame or single-frame
-        if len(frames.shape) == 3:
-            height, width = frames[0].shape
-        else:
+        # Read Photometric Interpretation to handle inverted images
+        pi = ds.PhotometricInterpretation if 'PhotometricInterpretation' in ds else 'MONOCHROME2'
+        
+        if pi == 'MONOCHROME1':
+            frames = np.amax(frames) - frames
+
+        is_rgb = False
+        if len(frames.shape) == 2:
+            # (height, width) - single frame grayscale
             height, width = frames.shape
             frames = [frames]
+        elif len(frames.shape) == 3:
+            if frames.shape[2] == 3:
+                # (height, width, 3) - single frame RGB
+                height, width, _ = frames.shape
+                frames = [frames]
+                is_rgb = True
+            else:
+                # (frames, height, width) - multi-frame grayscale
+                num_frames, height, width = frames.shape
+        elif len(frames.shape) == 4:
+            # (frames, height, width, 3) - multi-frame RGB
+            num_frames, height, width, _ = frames.shape
+            is_rgb = True
+        else:
+            print(f"Unsupported DICOM shape: {frames.shape}")
+            return False
 
         video = cv2.VideoWriter(
             output_video_path,
@@ -40,7 +61,11 @@ def convert_dicom_to_mp4(dicom_path, output_video_path):
                 else:
                     frame = frame.astype(np.uint8)
 
-            img = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+            if is_rgb:
+                # DICOM RGB is usually RGB, OpenCV expects BGR
+                img = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            else:
+                img = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
 
             # Draw overlay if present
             if overlay is not None:
