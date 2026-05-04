@@ -180,8 +180,13 @@ async def dicom_to_video_endpoint(file: UploadFile = File(...)):
 
     try:
         success = convert_dicom_to_mp4(input_path, output_video_path)
-        
-        if success and os.path.exists(output_video_path):
+
+        if success and os.path.exists(output_video_path) and os.path.getsize(output_video_path) > 0:
+            # Uploaded DICOM no longer needed after successful conversion
+            try:
+                os.remove(input_path)
+            except OSError:
+                pass
             return JSONResponse(status_code=200, content={
                 "status": "success",
                 "data": {
@@ -189,9 +194,23 @@ async def dicom_to_video_endpoint(file: UploadFile = File(...)):
                     "filename": f"{unique_id}.mp4"
                 }
             })
-        else:
-            raise HTTPException(status_code=500, detail="DICOM conversion failed or output video not found.")
+        # conversion failed or produced empty file — clean up
+        for p in (input_path, output_video_path):
+            try:
+                if os.path.exists(p):
+                    os.remove(p)
+            except OSError:
+                pass
+        raise HTTPException(status_code=500, detail="DICOM conversion failed or output video was empty.")
+    except HTTPException:
+        raise
     except Exception as e:
+        for p in (input_path, output_video_path):
+            try:
+                if os.path.exists(p):
+                    os.remove(p)
+            except OSError:
+                pass
         raise HTTPException(status_code=500, detail=f"Error during DICOM conversion: {str(e)}")
 
 @app.get("/download/{filename}")
